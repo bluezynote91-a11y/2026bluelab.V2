@@ -271,7 +271,7 @@ const App = () => {
       setHistory(localHistory);
       
       if (!DATABASE_URL || DATABASE_URL.includes("복사한_주소")) { setIsLoading(false); return; }
-      const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData_v2.json`;
+      const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData.json`;
       try {
         const response = await fetch(dbUrl);
         const data = await response.json();
@@ -293,6 +293,9 @@ const App = () => {
           if (data.targetScore) setTargetScore(data.targetScore);
           if (data.manualTotalBonus !== undefined) setManualTotalBonus(data.manualTotalBonus);
           if (data.leaderConfig) setLeaderConfig(data.leaderConfig);
+          
+          // 🔥 서버에서 초기화 기준 시간 불러오기
+          if (data.resetTimestamp !== undefined) setResetTimestamp(data.resetTimestamp);
         }
       } catch (e) {}
 
@@ -311,7 +314,7 @@ const App = () => {
   // 📡 2. 파이어베이스 1초 실시간 수신기
   useEffect(() => {
     if (!DATABASE_URL || DATABASE_URL.includes("복사한_주소")) return;
-    const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData_v2.json`;
+    const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData.json`;
     
     const fetchLive = async () => {
       try {
@@ -342,6 +345,9 @@ const App = () => {
           if (data.isWeeklyClaimed !== undefined) setIsWeeklyClaimed(data.isWeeklyClaimed);
           if (data.gachaConfig?.mode) setGachaConfig(prev => ({...prev, mode: data.gachaConfig.mode}));
           if (data.manualTotalBonus !== undefined) setManualTotalBonus(data.manualTotalBonus);
+          
+          // 🔥 실시간으로 초기화 기준 시간 감지
+          if (data.resetTimestamp !== undefined) setResetTimestamp(data.resetTimestamp);
         }
       } catch (e) {}
     };
@@ -356,7 +362,7 @@ const App = () => {
     localStorage.setItem('dal_v27_history', JSON.stringify(history));
     
     if (DATABASE_URL && !DATABASE_URL.includes("복사한_주소")) {
-       const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData_v2.json`;
+       const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData.json`;
        const configUpdates = { shopItems, bossPresets, marketPresets, marketItems, gachaConfig, manitoConfig, evoThresholds, tierThresholds, targetScore, students, rolesList, manualTotalBonus, leaderConfig };
        fetch(dbUrl, { method: 'PATCH', body: JSON.stringify(configUpdates) }).catch(e=>{});
     }
@@ -388,9 +394,12 @@ const App = () => {
       if(updates.manualTotalBonus !== undefined) setManualTotalBonus(updates.manualTotalBonus);
       if(updates.leaderConfig) setLeaderConfig(updates.leaderConfig);
       if(updates.manitoConfig) setManitoConfig(updates.manitoConfig);
+      
+      // 🔥 기준 시간 동기화
+      if(updates.resetTimestamp !== undefined) setResetTimestamp(updates.resetTimestamp);
       return;
     }
-    const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData_v2.json`;
+    const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData.json`;
     try { await fetch(dbUrl, { method: 'PATCH', body: JSON.stringify(updates) }); } 
     catch (e) {}
   };
@@ -421,6 +430,7 @@ const App = () => {
     return { icon: '👑', label: '10. 생명의 세계수' };
   };
 
+  // 🔥 이 부분이 핵심입니다! 저장된 기준 시간(resetTimestamp)보다 나중의 기록만 유효한 것으로 인정합니다.
   const validHistory = useMemo(() => history.filter(h => h.id > resetTimestamp), [history, resetTimestamp]);
 
   const todayStudentStats = useMemo(() => {
@@ -690,12 +700,21 @@ const App = () => {
     }
   };
 
+  // 🔥 완벽한 공장 초기화 로직 (해결책 A + B 통합)
   const factoryResetSystem = () => {
     if (!window.confirm('🚨 시스템 완전 공장 초기화. 모든 과거 데이터가 지워집니다.')) return;
     if (window.prompt('초기화 라고 입력하세요.') !== '초기화') return;
-    setResetTimestamp(Date.now()); 
-    syncToFirebase({ checkedStudents: {}, classPrep: {}, threeCompliments: {}, teacherCompliments: {}, checkedGroupGoals: {}, timeoutChecks: {}, subjectChecks: {}, usedPoints: {}, wipedPoints: {}, bossBonusPoints: 0, activeBoss: null, activeMarket: null, bossAttacks: {}, weeklyStreak: 0, isWeeklyClaimed: false, manualTotalBonus: 0, leaderBonuses: {} });
-    alert('완전 초기화 완료!');
+    
+    // 1. 현재 시간을 변수에 담고, 파이어베이스로 전송
+    const now = Date.now();
+    setResetTimestamp(now); 
+    
+    // 2. 브라우저에 임시 저장된 과거 마감 기록 배열을 물리적으로 비움 (데이터 비만 방지)
+    setHistory([]); 
+    
+    syncToFirebase({ checkedStudents: {}, classPrep: {}, threeCompliments: {}, teacherCompliments: {}, checkedGroupGoals: {}, timeoutChecks: {}, subjectChecks: {}, usedPoints: {}, wipedPoints: {}, bossBonusPoints: 0, activeBoss: null, activeMarket: null, bossAttacks: {}, weeklyStreak: 0, isWeeklyClaimed: false, manualTotalBonus: 0, leaderBonuses: {}, resetTimestamp: now });
+    
+    alert('완전 초기화 완료!\n(※ 연동된 구글 시트에 남은 과거 데이터 행은 직접 삭제해 주시면 로딩 속도 최적화에 더욱 좋습니다.)');
   };
 
   // 🔥 마니또 정체 공개 연출 핸들러
@@ -1491,12 +1510,11 @@ const App = () => {
                   </div>
                 )}
 
-                {/* 5. 시스템 설정 탭 (명단 업데이트 버튼 추가) */}
+                {/* 5. 시스템 설정 탭 (명단 업데이트 버튼 추가 및 리셋 로직 완성) */}
                 {teacherTab === 'settings' && (
                   <div className="space-y-8">
                      <h3 className="text-3xl font-black text-slate-800 mb-8 px-2 border-l-8 border-slate-700 pl-6">시스템 커스텀 및 초기화</h3>
                      
-                     {/* 🔥 명단 동기화 버튼 블록 추가 🔥 */}
                      <div className="bg-blue-50 p-8 rounded-[30px] border-2 border-blue-200 flex flex-col xl:flex-row items-start xl:items-center justify-between shadow-sm gap-6">
                         <div>
                            <h4 className="text-xl font-black text-blue-700 mb-2 flex items-center gap-2"><Users className="w-6 h-6"/> 새 학기 명단 강제 동기화</h4>
