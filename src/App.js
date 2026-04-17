@@ -271,7 +271,7 @@ const App = () => {
       setHistory(localHistory);
       
       if (!DATABASE_URL || DATABASE_URL.includes("복사한_주소")) { setIsLoading(false); return; }
-      const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData.json`;
+      const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData_v2.json`;
       try {
         const response = await fetch(dbUrl);
         const data = await response.json();
@@ -311,7 +311,7 @@ const App = () => {
   // 📡 2. 파이어베이스 1초 실시간 수신기
   useEffect(() => {
     if (!DATABASE_URL || DATABASE_URL.includes("복사한_주소")) return;
-    const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData.json`;
+    const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData_v2.json`;
     
     const fetchLive = async () => {
       try {
@@ -356,7 +356,7 @@ const App = () => {
     localStorage.setItem('dal_v27_history', JSON.stringify(history));
     
     if (DATABASE_URL && !DATABASE_URL.includes("복사한_주소")) {
-       const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData.json`;
+       const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData_v2.json`;
        const configUpdates = { shopItems, bossPresets, marketPresets, marketItems, gachaConfig, manitoConfig, evoThresholds, tierThresholds, targetScore, students, rolesList, manualTotalBonus, leaderConfig };
        fetch(dbUrl, { method: 'PATCH', body: JSON.stringify(configUpdates) }).catch(e=>{});
     }
@@ -390,7 +390,7 @@ const App = () => {
       if(updates.manitoConfig) setManitoConfig(updates.manitoConfig);
       return;
     }
-    const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData.json`;
+    const dbUrl = `${DATABASE_URL.replace(/\/$/, '')}/classData_v2.json`;
     try { await fetch(dbUrl, { method: 'PATCH', body: JSON.stringify(updates) }); } 
     catch (e) {}
   };
